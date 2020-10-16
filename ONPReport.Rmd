@@ -1,0 +1,122 @@
+---
+title: "Online News Popularity"
+author: "DRV"
+date: "10/14/2020"
+output: html_document
+params:
+  day: x[[2]]
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+``` {r Read In Data}
+library(readr)
+
+onlineNews <- read.csv("C:/Users/drven/Documents/ST 558/Project-2/OnlineNewsPopularity/OnlineNewsPopularity.csv", header = TRUE, sep = ",", stringsAsFactors = FALSE)
+
+```
+
+```{r Summarization and Data Analysis}
+
+library(dplyr)
+library(ggplot2)
+library(shiny)
+
+# I believe the problem is with my paste0 function below 
+
+dayvar <- ifelse(onlineNews$weekday_is_monday == 1, "monday", ifelse(onlineNews$weekday_is_tuesday == 1, "tuesday", ifelse(onlineNews$weekday_is_wednesday == 1, "wednesday", ifelse(onlineNews$weekday_is_thursday == 1, "thursday", ifelse(onlineNews$weekday_is_friday == 1, "friday", ifelse(onlineNews$weekday_is_saturday == 1, "saturday", "sunday"))))))
+
+#ifelse(<condition>, <yes>, ifelse(<condition>, <yes>, <no>))
+
+onlineNews1Day <- as.data.frame(filter(onlineNews, dayvar == params$day))
+
+onlineNews1Day$url <- as.numeric(as.factor(onlineNews1Day$url))
+
+
+cormat <- round(cor(onlineNews1Day),2)
+
+# Create Correlation heatmap
+library(reshape2)
+melted_cor <- melt(cormat)
+
+# Get lower triangle of the correlation matrix
+  get_lower_tri<-function(cormat){
+    cormat[upper.tri(cormat)] <- NA
+    return(cormat)
+  }
+  # Get upper triangle of the correlation matrix
+  get_upper_tri <- function(cormat){
+    cormat[lower.tri(cormat)]<- NA
+    return(cormat)
+  }
+
+upper_tri <- get_upper_tri(cormat)
+
+melted_cor <- melt(upper_tri, na.rm = TRUE)
+
+
+#Subset only for Shares 
+melted_cor <- filter(melted_cor, melted_cor$Var2 == "shares")
+
+print(melted_cor)
+
+# Heatmap
+ggplot(data = melted_cor, aes(Var2, Var1, fill = value))+
+ geom_tile(color = "white")+
+ scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+   midpoint = 0, limit = c(-1,1), space = "Lab", 
+   name="Pearson\nCorrelation") +
+  theme_minimal()+ 
+ theme(axis.text.x = element_text(angle = 45, vjust = 1, 
+    size = 10, hjust = 1))+
+ coord_fixed()
+
+
+### We find that 
+### kw_avg_avg with r^2 = 0.11, 
+### LDA_03 with r^2 = 0.07,  
+### kw_avg_max with r^2 = 0.06, and 
+### avg_negative_polarity with r^2= -0.06 
+### are the variables in the data most highly correlated to the variable "shares". We will use these variables in our model. 
+```
+
+```{r Fitting Models}
+#Separate into training and test sets 
+
+set.seed(69)
+train <- sample(1:nrow(onlineNews1Day), size = nrow(onlineNews1Day)*0.8)
+test <- dplyr::setdiff(1:nrow(onlineNews1Day), train)
+
+onlineNewsTrain <- onlineNews1Day[train,]
+onlineNewsTest <- onlineNews1Day[test,]
+
+#Regression Tree Based Model, using variables kw_avg_avg and LDA_03, using leave one out cross validation with 5 samples. 
+
+library(caret)
+
+treefit <- train(shares ~ kw_avg_avg + LDA_03, data = onlineNewsTrain, method = "rpart", trControl = trainControl(method = "LOOCV", number = 5))
+
+#Boosted Tree Model, using variables kw_avg_avg and LDA_03, using cross validation with 5 samples. Final model is below. 
+
+gbmfit <- train(shares ~ kw_avg_avg + LDA_03, data = onlineNewsTrain, method = "gbm", trControl = trainControl(method = "cv", number = 5))
+
+# Test Regression tree model fit against test data 
+
+predTreeFit <- predict(treefit, newdata = onlineNewsTest)
+postResample(predTreeFit, onlineNewsTest$shares)
+
+# test Boosted Tree Model fit agains test data 
+
+predGbmFit <- predict(gbmfit, newdata = onlineNewsTest)
+postResample(predGbmFit, onlineNewsTest$shares)
+
+# It appears the Boosted Tree Model has the lower RMSE and MAE of the two models. Therefore I will conclude that this the better predictor of the two models. 
+
+```
+
+
+
+
