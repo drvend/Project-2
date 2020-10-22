@@ -15,7 +15,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ``` {r Read In Data}
 library(readr)
 
-onlineNews <- read.csv("C:/Users/drven/Documents/ST 558/Project-2/OnlineNewsPopularity/OnlineNewsPopularity.csv", header = TRUE, sep = ",", stringsAsFactors = FALSE)
+onlineNews <- read.csv("OnlineNewsPopularity/OnlineNewsPopularity.csv", header = TRUE, sep = ",", stringsAsFactors = FALSE)
 
 ```
 
@@ -106,17 +106,37 @@ gbmfit <- train(shares ~ kw_avg_avg + LDA_03, data = onlineNewsTrain, method = "
 # Test Regression tree model fit against test data 
 
 predTreeFit <- predict(treefit, newdata = onlineNewsTest)
-postResample(predTreeFit, onlineNewsTest$shares)
+treeResults <- postResample(predTreeFit, onlineNewsTest$shares)
 
 # test Boosted Tree Model fit agains test data 
 
 predGbmFit <- predict(gbmfit, newdata = onlineNewsTest)
-postResample(predGbmFit, onlineNewsTest$shares)
+boostResults <- postResample(predGbmFit, onlineNewsTest$shares)
 
 # It appears the Boosted Tree Model has the lower RMSE and MAE of the two models. Therefore I will conclude that this the better predictor of the two models. 
 
 ```
 
+For the secondary analysis, we'll use the same predictors (`kw_avg_avt` and `LDA_03`) in a linear regression model. Then we can take a look at the summary of the model and several measures of model fit, including the RMSE, Rsquared, and MAE.  
 
+```{r}
+# Secondary analysis: a linear regression model
+lmfit <- train(shares ~ kw_avg_avg + LDA_03, data = onlineNewsTrain, method = "lm", trControl = trainControl(method = "cv", number = 10))
+summary(lmfit)
+lmfit$results
+```
 
+Now we fit the model on the test set and then use `postResample` to find `RMSE`, `Rsquared`, and `MAE`.  
 
+```{r}
+# test linear regression model on test data
+predLm <- predict(lmfit, newdata = onlineNewsTest)
+lmResults <- postResample(predLm, onlineNewsTest$shares)
+lmResults
+```
+
+Finally, we put all the model fit values together to see how different models perform differently.  
+
+```{r}
+data.frame(treeResults, boostResults, lmResults)
+```
